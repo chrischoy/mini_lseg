@@ -2,7 +2,7 @@
 
 
 ```
-python lseg_standalone.py --image_path XXX.jpg --weights demo_e200.ckpt
+python lseg.py --image_path XXX.jpg --weights demo_e200.ckpt
 ```
 
 ## Example output

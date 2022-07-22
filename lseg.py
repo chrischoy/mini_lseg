@@ -422,97 +422,101 @@ class Options:
         return args
 
 
-args = Options().parse()
+if __name__ == "__main__":
+    args = Options().parse()
 
-torch.manual_seed(args.seed)
-args.test_batch_size = 1
-args.scale_inv = False
-args.widehead = True
-args.backbone = "clip_vitl16_384"
-args.ignore_index = 255
+    torch.manual_seed(args.seed)
+    args.test_batch_size = 1
+    args.scale_inv = False
+    args.widehead = True
+    args.backbone = "clip_vitl16_384"
+    args.ignore_index = 255
 
-head = nn.Sequential(
-    Interpolate(scale_factor=2, mode="bilinear", align_corners=True),
-)
+    head = nn.Sequential(
+        Interpolate(scale_factor=2, mode="bilinear", align_corners=True),
+    )
 
-net = LSegNet(
-    head=head,
-    backbone=args.backbone,
-    num_features=256,
-    aux_weight=0,
-    se_loss=False,
-    se_weight=0,
-    base_lr=0,
-    batch_size=1,
-    max_epochs=0,
-    ignore_index=args.ignore_index,
-    dropout=0.0,
-    scale_inv=args.scale_inv,
-    augment=False,
-    use_bn=True,
-    no_batchnorm=False,
-    widehead=args.widehead,
-    widehead_hr=args.widehead_hr,
-    arch_option=0,
-    block_depth=0,
-    activation="lrelu",
-)
+    net = LSegNet(
+        head=head,
+        backbone=args.backbone,
+        num_features=256,
+        aux_weight=0,
+        se_loss=False,
+        se_weight=0,
+        base_lr=0,
+        batch_size=1,
+        max_epochs=0,
+        ignore_index=args.ignore_index,
+        dropout=0.0,
+        scale_inv=args.scale_inv,
+        augment=False,
+        use_bn=True,
+        no_batchnorm=False,
+        widehead=args.widehead,
+        widehead_hr=args.widehead_hr,
+        arch_option=0,
+        block_depth=0,
+        activation="lrelu",
+    )
 
-eval_module = LSegMultiEvalModule(net)
-weights = torch.load(args.weights, map_location=args.device)
-eval_module.load_state_dict(weights["state_dict"])
-eval_module = eval_module.eval()
-eval_module = eval_module.to(args.device)
+    eval_module = LSegMultiEvalModule(net)
+    weights = torch.load(args.weights, map_location=args.device)
+    eval_module.load_state_dict(weights["state_dict"])
+    eval_module = eval_module.eval()
+    eval_module = eval_module.to(args.device)
 
-transform = transforms.Compose(
-    [
-        transforms.ToTensor(),
-        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-    ]
-)
-assert os.path.exists(args.image_path)
-image = Image.open(args.image_path)
-pimage = transform(np.array(image)[..., :3]).unsqueeze(0).to(args.device)
-_, _, h, w = pimage.shape
+    transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+        ]
+    )
+    assert os.path.exists(args.image_path)
+    image = Image.open(args.image_path)
+    pimage = transform(np.array(image)[..., :3]).unsqueeze(0).to(args.device)
+    _, _, h, w = pimage.shape
 
-print(pimage.shape)
-# resize image to current size
-if h > args.base_size or w > args.base_size:
-    height, width, _ = resize_hw_max(h, w, args.base_size)
-    pimage = resize_image(pimage, height, width, **up_kwargs)
     print(pimage.shape)
+    # resize image to current size
+    if h > args.base_size or w > args.base_size:
+        height, width, _ = resize_hw_max(h, w, args.base_size)
+        pimage = resize_image(pimage, height, width, **up_kwargs)
+        print(pimage.shape)
 
-# When label_set=None, generate the image features.
-# Must use no_grad for small GPU memory usage
-with torch.no_grad():
-    output = eval_module(pimage)
-    print(output.shape)
-
-while True:
-    input_labels = input("labels (e.g. 'chair,tv,table,other'): ")
-    labels = []
-    for label in input_labels.split(","):
-        labels.append(label.strip())
-
+    # When label_set=None, generate the image features.
+    # Must use no_grad for small GPU memory usage
     with torch.no_grad():
-        outputs = eval_module(pimage, labels)
-        preds = [torch.max(output, 0)[1].cpu().numpy() for output in outputs]
+        output = eval_module(pimage)
+        print(output.shape)
 
-    # Visualization
-    palette = get_new_pallete(len(labels))
-    mask, patches = get_new_mask_pallete(
-        preds[0], palette, out_label_flag=True, labels=labels
-    )
-    seg = mask.convert("RGBA")
-    fig = plt.figure()
-    plt.subplot(121)
-    plt.imshow(image)
-    plt.axis("off")
-    plt.subplot(122)
-    plt.imshow(seg)
-    plt.legend(
-        handles=patches, loc="upper right", bbox_to_anchor=(1.3, 1), prop={"size": 5}
-    )
-    plt.axis("off")
-    plt.tight_layout()
-    plt.show()
+    while True:
+        input_labels = input("labels (e.g. 'chair,tv,table,other'): ")
+        labels = []
+        for label in input_labels.split(","):
+            labels.append(label.strip())
+
+        with torch.no_grad():
+            outputs = eval_module(pimage, labels)
+            preds = [torch.max(output, 0)[1].cpu().numpy() for output in outputs]
+
+        # Visualization
+        palette = get_new_pallete(len(labels))
+        mask, patches = get_new_mask_pallete(
+            preds[0], palette, out_label_flag=True, labels=labels
+        )
+        seg = mask.convert("RGBA")
+        fig = plt.figure()
+        plt.subplot(121)
+        plt.imshow(image)
+        plt.axis("off")
+        plt.subplot(122)
+        plt.imshow(seg)
+        plt.legend(
+            handles=patches,
+            loc="upper right",
+            bbox_to_anchor=(1.3, 1),
+            prop={"size": 5},
+        )
+        plt.axis("off")
+        plt.tight_layout()
+        plt.show()
