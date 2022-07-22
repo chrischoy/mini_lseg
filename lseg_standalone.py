@@ -3,6 +3,8 @@ import math
 import argparse
 import numpy as np
 from PIL import Image
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 import torch
 import torch.nn as nn
@@ -109,7 +111,9 @@ class LSeg(nn.Module):
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
         if text is None:
-            out = image_features.view(imshape[0], imshape[2], imshape[3], -1).permute(0, 3, 1, 2)
+            out = image_features.view(imshape[0], imshape[2], imshape[3], -1).permute(
+                0, 3, 1, 2
+            )
             out = self.scratch.output_conv(out)
             return out
 
@@ -117,7 +121,7 @@ class LSeg(nn.Module):
         text_features = self.clip_pretrained.encode_text(text)
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
-        logits_per_image = self.logit_scale * image_features @ text_features.t()
+        logits_per_image = self.logit_scale * image_features.half() @ text_features.t()
 
         out = (
             logits_per_image.float()
@@ -310,6 +314,46 @@ def flip_image(img):
     return img.index_select(3, idx)
 
 
+def get_new_pallete(num_cls):
+    n = num_cls
+    pallete = [0] * (n * 3)
+    for j in range(0, n):
+        lab = j
+        pallete[j * 3 + 0] = 0
+        pallete[j * 3 + 1] = 0
+        pallete[j * 3 + 2] = 0
+        i = 0
+        while lab > 0:
+            pallete[j * 3 + 0] |= ((lab >> 0) & 1) << (7 - i)
+            pallete[j * 3 + 1] |= ((lab >> 1) & 1) << (7 - i)
+            pallete[j * 3 + 2] |= ((lab >> 2) & 1) << (7 - i)
+            i = i + 1
+            lab >>= 3
+    return pallete
+
+
+def get_new_mask_pallete(npimg, new_palette, out_label_flag=False, labels=None):
+    """Get image color pallete for visualizing masks"""
+    # put colormap
+    out_img = Image.fromarray(npimg.squeeze().astype("uint8"))
+    out_img.putpalette(new_palette)
+
+    if out_label_flag:
+        assert labels is not None
+        u_index = np.unique(npimg)
+        patches = []
+        for i, index in enumerate(u_index):
+            label = labels[index]
+            cur_color = [
+                new_palette[index * 3] / 255.0,
+                new_palette[index * 3 + 1] / 255.0,
+                new_palette[index * 3 + 2] / 255.0,
+            ]
+            red_patch = mpatches.Patch(color=cur_color, label=label)
+            patches.append(red_patch)
+    return out_img, patches
+
+
 class Options:
     def __init__(self):
         parser = argparse.ArgumentParser(description="PyTorch Segmentation")
@@ -334,12 +378,6 @@ class Options:
             help="backbone name (default: resnet50)",
         )
         parser.add_argument(
-            "--base-size", type=int, default=520, help="base image size"
-        )
-        parser.add_argument(
-            "--crop-size", type=int, default=480, help="crop image size"
-        )
-        parser.add_argument(
             "--seed", type=int, default=1, metavar="S", help="random seed (default: 1)"
         )
         # checking point
@@ -347,11 +385,6 @@ class Options:
             "--weights", type=str, default="demo_e200.ckpt", help="checkpoint to test"
         )
         # evaluation option
-        parser.add_argument(
-            "--module",
-            default="lseg",
-            help="select model definition",
-        )
 
         # test option
         parser.add_argument(
@@ -377,13 +410,6 @@ class Options:
             type=int,
             default=-1,
             help="numeric value of ignore label in gt",
-        )
-
-        parser.add_argument(
-            "--label_src",
-            type=str,
-            default="default",
-            help="how to get the labels",
         )
 
         parser.add_argument(
@@ -466,5 +492,38 @@ _, _, h, w = pimage.shape
 if h > 520 or w > 520:
     height, width, _ = resize_hw_max(h, w, 520)
     pimage = resize_image(pimage, height, width, **up_kwargs)
+
+# When label_set=None, generate the image features.
+# Must use no_grad for small GPU memory usage
 with torch.no_grad():
     output = eval_module(pimage)
+    print(output.shape)
+
+while True:
+    input_labels = input("labels (e.g. 'chair,tv,table,other'): ")
+    labels = []
+    for label in input_labels.split(","):
+        labels.append(label.strip())
+
+    with torch.no_grad():
+        outputs = eval_module(pimage, labels)
+        preds = [torch.max(output, 0)[1].cpu().numpy() for output in outputs]
+
+    # Visualization
+    palette = get_new_pallete(len(labels))
+    mask, patches = get_new_mask_pallete(
+        preds[0], palette, out_label_flag=True, labels=labels
+    )
+    seg = mask.convert("RGBA")
+    fig = plt.figure()
+    plt.subplot(121)
+    plt.imshow(image)
+    plt.axis("off")
+    plt.subplot(122)
+    plt.imshow(seg)
+    plt.legend(
+        handles=patches, loc="upper right", bbox_to_anchor=(1.3, 1), prop={"size": 5}
+    )
+    plt.axis("off")
+    plt.tight_layout()
+    plt.show()
