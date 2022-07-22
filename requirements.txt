@@ -1,0 +1,7 @@
+torch
+torchvision
+timm
+clip
+Pillow
+matplotlib
+numpy
