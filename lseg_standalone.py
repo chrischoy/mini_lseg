@@ -25,7 +25,7 @@ from lseg_blocks import (
 up_kwargs = {"mode": "bilinear", "align_corners": True}
 
 
-class LSeg(nn.Module):
+class LSegNet(nn.Module):
     def __init__(
         self,
         head,
@@ -36,7 +36,7 @@ class LSeg(nn.Module):
         use_bn=False,
         **kwargs,
     ):
-        super(LSeg, self).__init__()
+        super(LSegNet, self).__init__()
 
         self.channels_last = channels_last
 
@@ -79,14 +79,7 @@ class LSeg(nn.Module):
 
         self.scratch.output_conv = head
 
-        self.text = None if self.labels is None else clip.tokenize(self.labels)
-
     def forward(self, x, labelset=None):
-        if labelset is None:
-            text = self.text
-        else:
-            text = clip.tokenize(labelset)
-
         if self.channels_last:
             x.contiguous(memory_format=torch.channels_last)
 
@@ -110,13 +103,14 @@ class LSeg(nn.Module):
         # normalized features
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
-        if text is None:
+        if labelset is None:
             out = image_features.view(imshape[0], imshape[2], imshape[3], -1).permute(
                 0, 3, 1, 2
             )
             out = self.scratch.output_conv(out)
             return out
 
+        text = clip.tokenize(labelset)
         text = text.to(x.device)
         text_features = self.clip_pretrained.encode_text(text)
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
@@ -137,25 +131,6 @@ class LSeg(nn.Module):
         out = self.scratch.output_conv(out)
 
         return out
-
-
-class LSegNet(LSeg):
-    """Network for semantic segmentation."""
-
-    def __init__(
-        self, labels=None, path=None, scale_factor=0.5, crop_size=480, **kwargs
-    ):
-        kwargs["use_bn"] = True
-
-        self.crop_size = crop_size
-        self.scale_factor = scale_factor
-        self.labels = labels
-
-        head = nn.Sequential(
-            Interpolate(scale_factor=2, mode="bilinear", align_corners=True),
-        )
-
-        super().__init__(head, **kwargs)
 
 
 class LSegMultiEvalModule(nn.Module):
@@ -378,6 +353,12 @@ class Options:
             help="backbone name (default: resnet50)",
         )
         parser.add_argument(
+            "--base_size", type=int, default=520, help="base image size"
+        )
+        parser.add_argument(
+            "--crop_size", type=int, default=480, help="crop image size"
+        )
+        parser.add_argument(
             "--seed", type=int, default=1, metavar="S", help="random seed (default: 1)"
         )
         # checking point
@@ -450,7 +431,12 @@ args.widehead = True
 args.backbone = "clip_vitl16_384"
 args.ignore_index = 255
 
+head = nn.Sequential(
+    Interpolate(scale_factor=2, mode="bilinear", align_corners=True),
+)
+
 net = LSegNet(
+    head=head,
     backbone=args.backbone,
     num_features=256,
     aux_weight=0,
@@ -463,6 +449,7 @@ net = LSegNet(
     dropout=0.0,
     scale_inv=args.scale_inv,
     augment=False,
+    use_bn=True,
     no_batchnorm=False,
     widehead=args.widehead,
     widehead_hr=args.widehead_hr,
@@ -488,10 +475,12 @@ image = Image.open(args.image_path)
 pimage = transform(np.array(image)[..., :3]).unsqueeze(0).to(args.device)
 _, _, h, w = pimage.shape
 
+print(pimage.shape)
 # resize image to current size
-if h > 520 or w > 520:
-    height, width, _ = resize_hw_max(h, w, 520)
+if h > args.base_size or w > args.base_size:
+    height, width, _ = resize_hw_max(h, w, args.base_size)
     pimage = resize_image(pimage, height, width, **up_kwargs)
+    print(pimage.shape)
 
 # When label_set=None, generate the image features.
 # Must use no_grad for small GPU memory usage
