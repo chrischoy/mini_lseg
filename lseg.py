@@ -139,11 +139,12 @@ class LSegMultiEvalModule(nn.Module):
     def __init__(
         self,
         net,
+        max_size=520,
         flip=True,
         scales=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
     ):
         super(LSegMultiEvalModule, self).__init__()
-        self.base_size = 520
+        self.max_size = max_size
         self.crop_size = 480
 
         self.mean = [0.5, 0.5, 0.5]
@@ -154,8 +155,8 @@ class LSegMultiEvalModule(nn.Module):
         self.flip = flip
         self.net = net
         print(
-            "MultiEvalModule: base_size {}, crop_size {}".format(
-                self.base_size, self.crop_size
+            "MultiEvalModule: scale 1 max_size {}, crop_size {}".format(
+                self.max_size, self.crop_size
             )
         )
 
@@ -219,7 +220,7 @@ class LSegMultiEvalModule(nn.Module):
             scores = image.new().resize_(batch, self.nclass, h, w).zero_()
 
         for scale in self.scales:
-            long_size = int(math.ceil(self.base_size * scale))
+            long_size = int(math.ceil(self.max_size * scale))
             height, width, short_size = resize_hw_max(h, w, long_size)
             # resize image to current size
             cur_img = resize_image(image, height, width, **self._up_kwargs)
@@ -350,11 +351,9 @@ class Options:
             "--backbone",
             type=str,
             default="clip_vitl16_384",
-            help="backbone name (default: resnet50)",
+            help="backbone name",
         )
-        parser.add_argument(
-            "--base_size", type=int, default=520, help="base image size"
-        )
+        parser.add_argument("--max_size", type=int, default=520, help="max image size")
         parser.add_argument(
             "--crop_size", type=int, default=480, help="crop image size"
         )
@@ -422,23 +421,49 @@ class Options:
         return args
 
 
-if __name__ == "__main__":
-    args = Options().parse()
+class ToTensor(object):
+    def __init__(self):
+        self.totensor = transforms.ToTensor()
 
-    torch.manual_seed(args.seed)
-    args.test_batch_size = 1
-    args.scale_inv = False
-    args.widehead = True
-    args.backbone = "clip_vitl16_384"
-    args.ignore_index = 255
+    def __call__(self, x):
+        if torch.is_tensor(x):
+            return x
+        else:
+            return self.totensor(x)
 
+
+class Unsqueeze(object):
+    def __call__(self, x):
+        if x.ndim == 3:
+            return x.unsqueeze(0)
+        elif x.ndim == 4:
+            return x
+        else:
+            raise ValueError("Invalid input dimension: {x.ndim}")
+
+
+class ResizeLargeImage(object):
+    def __init__(self, max_size):
+        self.max_size = max_size
+
+    def __call__(self, x):
+        assert x.ndim == 4
+        _, _, h, w = x.shape
+        # resize image to current size
+        if h > self.max_size or w > self.max_size:
+            height, width, _ = resize_hw_max(h, w, self.max_size)
+            x = resize_image(x, height, width, **up_kwargs)
+        return x
+
+
+def get_standard_lseg(backbone="clip_vitl16_384", max_size=520):
     head = nn.Sequential(
         Interpolate(scale_factor=2, mode="bilinear", align_corners=True),
     )
 
     net = LSegNet(
         head=head,
-        backbone=args.backbone,
+        backbone=backbone,
         num_features=256,
         aux_weight=0,
         se_loss=False,
@@ -446,42 +471,62 @@ if __name__ == "__main__":
         base_lr=0,
         batch_size=1,
         max_epochs=0,
-        ignore_index=args.ignore_index,
+        ignore_index=255,
         dropout=0.0,
-        scale_inv=args.scale_inv,
+        scale_inv=False,
         augment=False,
         use_bn=True,
         no_batchnorm=False,
-        widehead=args.widehead,
-        widehead_hr=args.widehead_hr,
+        widehead=True,
+        widehead_hr=False,
         arch_option=0,
         block_depth=0,
         activation="lrelu",
     )
 
-    eval_module = LSegMultiEvalModule(net)
-    weights = torch.load(args.weights, map_location=args.device)
-    eval_module.load_state_dict(weights["state_dict"])
-    eval_module = eval_module.eval()
-    eval_module = eval_module.to(args.device)
-
     transform = transforms.Compose(
         [
-            transforms.ToTensor(),
+            ToTensor(),
+            Unsqueeze(),
+            ResizeLargeImage(max_size),
             transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
         ]
     )
+
+    return LSegMultiEvalModule(net, max_size=max_size), transform
+
+
+def init_lseg(
+    backbone="clip_vitl16_384",
+    weight_path=None,
+    max_size=320,
+    device="cuda",
+):
+    print(f"Initializing LSeg {backbone}, max_size={max_size}")
+    eval_module, transform = get_standard_lseg(backbone, max_size=max_size)
+    assert os.path.exists(weight_path)
+    weights = torch.load(weight_path, map_location=device)
+    eval_module.load_state_dict(weights["state_dict"])
+    eval_module = eval_module.eval()
+    eval_module = eval_module.to(device)
+    return eval_module, transform
+
+
+if __name__ == "__main__":
+    args = Options().parse()
+
+    torch.manual_seed(args.seed)
+
+    eval_module, transform = init_lseg(
+        args.backbone,
+        weight_path=args.weights,
+        max_size=args.max_size,
+        device=args.device,
+    )
+
     assert os.path.exists(args.image_path)
     image = Image.open(args.image_path)
-    pimage = transform(np.array(image)[..., :3]).unsqueeze(0).to(args.device)
-    _, _, h, w = pimage.shape
-
-    print(pimage.shape)
-    # resize image to current size
-    if h > args.base_size or w > args.base_size:
-        height, width, _ = resize_hw_max(h, w, args.base_size)
-        pimage = resize_image(pimage, height, width, **up_kwargs)
-        print(pimage.shape)
+    pimage = transform(np.array(image)[..., :3]).to(args.device)
 
     # When label_set=None, generate the image features.
     # Must use no_grad for small GPU memory usage
