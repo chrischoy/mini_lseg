@@ -24,6 +24,8 @@ from lseg_blocks import (
 
 up_kwargs = {"mode": "bilinear", "align_corners": True}
 
+GLOBAL_LSEG = {}
+
 
 class LSegNet(nn.Module):
     def __init__(
@@ -496,20 +498,33 @@ def get_standard_lseg(backbone="clip_vitl16_384", max_size=520):
     return LSegMultiEvalModule(net, max_size=max_size), transform
 
 
+@torch.no_grad()
 def init_lseg(
     backbone="clip_vitl16_384",
     weight_path=None,
     max_size=320,
     device="cuda",
 ):
-    print(f"Initializing LSeg {backbone}, max_size={max_size}")
-    eval_module, transform = get_standard_lseg(backbone, max_size=max_size)
-    assert os.path.exists(weight_path)
-    weights = torch.load(weight_path, map_location=device)
-    eval_module.load_state_dict(weights["state_dict"])
-    eval_module = eval_module.eval()
-    eval_module = eval_module.to(device)
-    return eval_module, transform
+    global GLOBAL_LSEG
+    if "eval_lseg" not in GLOBAL_LSEG:
+        eval_module, transform = get_standard_lseg(backbone, max_size=max_size)
+        assert os.path.exists(weight_path)
+        weights = torch.load(weight_path, map_location=device)
+        eval_module = eval_module.eval()
+        eval_module = eval_module.to(device)
+        eval_module.load_state_dict(weights["state_dict"])
+
+        def eval_lseg(x, label_set=None):
+            # When label_set=None, generate the image features.
+            # Must use no_grad for small GPU memory usage
+            with torch.no_grad():
+                return eval_module(x, label_set)
+
+        GLOBAL_LSEG["eval_lseg"] = eval_lseg
+        GLOBAL_LSEG["transform"] = transform
+    else:
+        eval_lseg, transform = GLOBAL_LSEG["eval_lseg"], GLOBAL_LSEG["transform"]
+    return eval_lseg, transform
 
 
 if __name__ == "__main__":
@@ -528,21 +543,14 @@ if __name__ == "__main__":
     image = Image.open(args.image_path)
     pimage = transform(np.array(image)[..., :3]).to(args.device)
 
-    # When label_set=None, generate the image features.
-    # Must use no_grad for small GPU memory usage
-    with torch.no_grad():
-        output = eval_module(pimage)
-        print(output.shape)
-
     while True:
         input_labels = input("labels (e.g. 'chair,tv,table,other'): ")
         labels = []
         for label in input_labels.split(","):
             labels.append(label.strip())
 
-        with torch.no_grad():
-            outputs = eval_module(pimage, labels)
-            preds = [torch.max(output, 0)[1].cpu().numpy() for output in outputs]
+        outputs = eval_module(pimage, labels)
+        preds = [torch.max(output, 0)[1].cpu().numpy() for output in outputs]
 
         # Visualization
         palette = get_new_pallete(len(labels))

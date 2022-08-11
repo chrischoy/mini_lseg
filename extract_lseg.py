@@ -5,31 +5,7 @@ import argparse
 from PIL import Image
 
 import torch
-from lseg import resize_hw_max, resize_image, up_kwargs
-
-GLOBAL_LSEG = {}
-
-
-@torch.no_grad()
-def init_lseg(
-    backbone="clip_vitl16_384",
-    weight_path=None,
-    max_size=320,
-    device="cuda",
-):
-    global GLOBAL_LSEG
-    if "eval_module" not in GLOBAL_LSEG:
-        eval_module, transform = init_lseg(
-            args.backbone,
-            weight_path=weight_path,
-            max_size=max_size,
-            device=device,
-        )
-        GLOBAL_LSEG["eval_module"] = eval_module
-        GLOBAL_LSEG["transform"] = transform
-    else:
-        eval_module, transform = GLOBAL_LSEG["eval_module"], GLOBAL_LSEG["transform"]
-    return eval_module, transform
+from lseg import init_lseg, resize_hw_max, resize_image, up_kwargs
 
 
 @gin.configurable
