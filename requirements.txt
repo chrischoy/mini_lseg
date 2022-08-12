@@ -5,3 +5,4 @@ clip @ git+https://github.com/openai/CLIP.git@04f4dc2ca1ed0acc9893bd1a3b526a7e02
 Pillow
 matplotlib
 numpy
+pytorch-lightning
