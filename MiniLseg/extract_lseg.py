@@ -5,7 +5,7 @@ import argparse
 from PIL import Image
 
 import torch
-from lseg import init_lseg, resize_hw_max, resize_image, up_kwargs
+from .lseg import init_lseg, resize_hw_max, resize_image, up_kwargs
 
 
 @gin.configurable

@@ -1,3 +1,4 @@
+gin-config
 torch
 torchvision
 timm

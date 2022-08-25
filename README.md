@@ -7,6 +7,7 @@ The original repository contains a lot of legacy packages that do not work with 
 
 ```
 pip install -r requirements.txt
+python setup.py install
 ```
 
 Download the ViT-L/16 weight with the CLIP ViT-B/32 text encoder.
@@ -15,7 +16,7 @@ Go to the [url](https://drive.google.com/file/d/1ayk6NXURI_vIPlym16f_RG3ffxBWHxv
 ## Demo
 
 ```
-python lseg.py --image_path XXX.jpg --weights demo_e200.ckpt --max_size 620
+python examples/segmentation_queries.py --image_path XXX.jpg --weights demo_e200.ckpt --max_size 620
 ```
 
 ## Example output
