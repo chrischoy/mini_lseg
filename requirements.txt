@@ -1,8 +1,7 @@
-gin-config
 torch
 torchvision
 timm
-clip @ git+https://github.com/openai/CLIP.git@04f4dc2ca1ed0acc9893bd1a3b526a7e02c4bb10
+clip @ git+https://github.com/openai/CLIP.git
 Pillow
 matplotlib
 numpy

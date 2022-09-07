@@ -84,7 +84,7 @@ class Options:
         )
         # checking point
         parser.add_argument(
-            "--weights", type=str, default="demo_e200.ckpt", help="checkpoint to test"
+            "--weights", type=str, default=None, help="checkpoint to test"
         )
         # evaluation option
 

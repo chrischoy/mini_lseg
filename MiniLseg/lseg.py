@@ -20,6 +20,10 @@ from .lseg_blocks import (
 
 up_kwargs = {"mode": "bilinear", "align_corners": True}
 
+WEIGHT_URLS = {
+    "clip_vitl16_384": "http://node2.chrischoy.org/data/etc/demo_e200.ckpt"
+}
+
 
 class LSegNet(nn.Module):
     def __init__(
@@ -368,6 +372,15 @@ def init_lseg(
     max_size=320,
     device="cuda",
 ):
+    if weight_path is None:
+        if backbone in WEIGHT_URLS:
+            WEIGHT_DIR = os.path.dirname(__file__) + "/.weights"
+            weight_path = WEIGHT_DIR + f"/{backbone}.ckpt"
+            if not os.path.exists(weight_path):
+                os.system("mkdir -p {WEIGHT_DIR}")
+                os.system(f"wget -O {weight_path} {WEIGHT_URLS[backbone]}")
+        else:
+            raise ValueError(f"Supported backbones: {WEIGHT_URLS.keys()}")
     assert os.path.exists(weight_path), f"Invalid weight path: {weight_path}"
     eval_module, transform = get_standard_lseg(backbone, max_size=max_size)
     weights = torch.load(weight_path, map_location=device)
