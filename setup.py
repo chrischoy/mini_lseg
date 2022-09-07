@@ -1,6 +1,8 @@
 #!/usr/bin/env python
-import os
 from setuptools import setup, find_packages
+
+with open("requirements.txt", "r") as f:
+    dependencies = [dep for dep in f.read().splitlines() if dep]
 
 setup(
     name="mini_lseg",
@@ -9,8 +11,9 @@ setup(
     author="Chris Choy",
     author_email="cchoy@nvidia.com",
     license="MIT",
-    packages=['MiniLseg'],
+    packages=["MiniLseg"],
     package_dir={"MiniLseg": "./MiniLseg"},
+    install_requires=dependencies,
     include_package_data=True,
     zip_safe=False,
 )
