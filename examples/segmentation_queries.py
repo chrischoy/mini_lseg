@@ -167,7 +167,10 @@ if __name__ == "__main__":
     pimage = transform(np.array(image)[..., :3]).to(args.device)
 
     while True:
-        input_labels = input("labels (e.g. 'chair,tv,table,other'): ")
+        input_labels = input("Put labels (e.g. 'chair,tv,table,other') or type quit: ")
+        if input_labels in ['q', 'quit']:
+            break
+
         labels = []
         for label in input_labels.split(","):
             labels.append(label.strip())

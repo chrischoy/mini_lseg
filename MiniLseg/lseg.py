@@ -27,9 +27,8 @@ from .lseg_blocks import (
 
 up_kwargs = {"mode": "bilinear", "align_corners": True}
 
-WEIGHT_URLS = {
-    "clip_vitl16_384": "http://node2.chrischoy.org/data/etc/demo_e200.ckpt"
-}
+WEIGHT_URLS = {"clip_vitl16_384": "http://node2.chrischoy.org/data/etc/demo_e200.ckpt"}
+GLOBAL_LSEGS = dict()
 
 
 class LSegNet(nn.Module):
@@ -219,7 +218,6 @@ class LSegMultiEvalModule(nn.Module):
     def forward(self, image, label_set=None):
         """Mult-size Evaluation"""
         # only single image is supported for evaluation
-        print("** MultiEvalModule forward phase: {} **".format(label_set))
         batch, _, h, w = image.size()
         assert batch == 1
         self.nclass = 512 if label_set is None else len(label_set)
@@ -378,7 +376,16 @@ def init_lseg(
     weight_path=None,
     max_size=320,
     device="cuda",
+    use_global=True,
 ):
+    """
+    Args:
+
+        use_global: when true, put the lseg network on python global memory.
+        This is useful when you have to use lseg network on different parts of
+        the codes like data generation and loss at the same time. True by default.
+
+    """
     if weight_path is None:
         if backbone in WEIGHT_URLS:
             WEIGHT_DIR = os.path.dirname(__file__) + "/.weights"
@@ -389,11 +396,23 @@ def init_lseg(
         else:
             raise ValueError(f"Supported backbones: {WEIGHT_URLS.keys()}")
     assert os.path.exists(weight_path), f"Invalid weight path: {weight_path}"
-    eval_module, transform = get_standard_lseg(backbone, max_size=max_size)
-    weights = torch.load(weight_path, map_location=device)
-    eval_module = eval_module.eval()
-    eval_module = eval_module.to(device)
-    eval_module.load_state_dict(weights["state_dict"])
+
+    def _load_lseg():
+        weights = torch.load(weight_path, map_location=device)
+        eval_module, transform = get_standard_lseg(backbone, max_size=max_size)
+        eval_module = eval_module.eval()
+        eval_module = eval_module.to(device)
+        eval_module.load_state_dict(weights["state_dict"])
+        return eval_module, transform
+
+    eval_module, transform = None, None
+    if use_global:
+        global GLOBAL_LSEGS
+        if backbone not in GLOBAL_LSEGS:
+            GLOBAL_LSEGS[backbone] = _load_lseg()
+        eval_module, transform = GLOBAL_LSEGS[backbone]
+    else:
+        eval_module, transform = _load_lseg()
 
     def eval_lseg(x, label_set=None):
         # When label_set=None, generate the image features.
