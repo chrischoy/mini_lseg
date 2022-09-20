@@ -14,7 +14,7 @@ with open("requirements.txt", "r") as f:
 
 setup(
     name="mini_lseg",
-    version="0.0.1",
+    version="0.0.2",
     description="Lightweight inference only language segmentation inference library",
     author="Chris Choy",
     author_email="cchoy@nvidia.com",
