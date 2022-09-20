@@ -392,7 +392,7 @@ def init_lseg(
             weight_path = WEIGHT_DIR + f"/{backbone}.ckpt"
             if not os.path.exists(weight_path):
                 os.system("mkdir -p {WEIGHT_DIR}")
-                os.system(f"wget -O {weight_path} {WEIGHT_URLS[backbone]}")
+                os.system(f"wget {WEIGHT_URLS[backbone]} -O {weight_path}")
         else:
             raise ValueError(f"Supported backbones: {WEIGHT_URLS.keys()}")
     assert os.path.exists(weight_path), f"Invalid weight path: {weight_path}"
