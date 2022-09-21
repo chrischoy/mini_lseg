@@ -8,6 +8,7 @@
 import os
 import math
 import numpy as np
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -322,7 +323,8 @@ class ResizeLargeImage(object):
 
     def __call__(self, x):
         assert x.ndim == 4
-        _, _, h, w = x.shape
+        _, c, h, w = x.shape
+        assert c in [3, 4], f"Invalid shape {x.shape}. The format must be BxCxHxW."
         # resize image to current size
         if h > self.max_size or w > self.max_size:
             height, width, _ = resize_hw_max(h, w, self.max_size)
@@ -388,8 +390,12 @@ def init_lseg(
     """
     if weight_path is None:
         if backbone in WEIGHT_URLS:
-            WEIGHT_DIR = os.path.dirname(__file__) + "/weights/"
-            weight_path = WEIGHT_DIR + f"{backbone}.ckpt"
+            WEIGHT_DIR = Path.home() / ".cache" / "MiniLseg" / "weights"
+            try:
+                WEIGHT_DIR.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                WEIGHT_DIR = Path(os.path.dirname(__file__)) / "weights"
+            weight_path = WEIGHT_DIR / f"{backbone}.ckpt"
             if not os.path.exists(weight_path):
                 os.system(f"wget {WEIGHT_URLS[backbone]} -O {weight_path}")
         else:
