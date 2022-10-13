@@ -1,11 +1,10 @@
-# Standalone Language Segmentation
+# Mini Language Segmentation
 
-This repository contains a standalone language segmentation network from [lang-seg](https://github.com/isl-org/lang-seg).
-The original repository contains a lot of legacy packages that do not work with the latest pytorch. This repo contains the minimal codebase for inference only.
+This repository contains only essential components for inference of the language segmentation network ([lang-seg](https://github.com/isl-org/lang-seg)).
 
 ## Installation
 
-First, install requirements and setup the package. Pretrained weights will be downloaded automatically.
+First, install requirements and setup the package. Pretrained weights (`demo_e200.ckpt`) will be downloaded automatically.
 
 ```
 pip install -r requirements.txt
