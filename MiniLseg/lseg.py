@@ -86,6 +86,15 @@ class LSegNet(nn.Module):
 
         self.scratch.output_conv = head
 
+    @torch.no_grad()
+    def encode_text(self, texts, normalize=True, device="cuda"):
+        text = clip.tokenize(texts)
+        text = text.to(device)
+        text_features = self.clip_pretrained.encode_text(text)
+        if normalize:
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+        return text_features
+
     def forward(self, x, labelset=None):
         if self.channels_last:
             x.contiguous(memory_format=torch.channels_last)
@@ -117,11 +126,7 @@ class LSegNet(nn.Module):
             out = self.scratch.output_conv(out)
             return out
 
-        text = clip.tokenize(labelset)
-        text = text.to(x.device)
-        text_features = self.clip_pretrained.encode_text(text)
-        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-
+        text_features = self.encode_text(labelset)
         logits_per_image = self.logit_scale * image_features.half() @ text_features.t()
 
         out = (
@@ -235,6 +240,9 @@ class LSegMultiEvalModule(nn.Module):
             scores += score
         scores /= len(self.scales)
         return scores
+
+    def encode_text(self, text, normalize=True):
+        return self.net.encode_text(text, normalize)
 
 
 def module_inference(module, image, label_set, flip=True):
