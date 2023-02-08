@@ -340,10 +340,12 @@ class ResizeLargeImage(object):
         return x
 
 
-def get_standard_lseg(backbone="clip_vitl16_384", max_size=520):
-    head = nn.Sequential(
-        Interpolate(scale_factor=2, mode="bilinear", align_corners=True),
-    )
+def get_standard_lseg(backbone="clip_vitl16_384", max_size=520, use_upsample=True):
+    head = nn.Identity()
+    if use_upsample:
+        head = nn.Sequential(
+            Interpolate(scale_factor=2, mode="bilinear", align_corners=True),
+        )
 
     net = LSegNet(
         head=head,
@@ -383,6 +385,7 @@ def get_standard_lseg(backbone="clip_vitl16_384", max_size=520):
 @torch.no_grad()
 def init_lseg(
     backbone="clip_vitl16_384",
+    use_upsample=True,
     weight_path=None,
     max_size=320,
     device="cuda",
@@ -412,7 +415,7 @@ def init_lseg(
 
     def _load_lseg():
         weights = torch.load(weight_path, map_location=device)
-        eval_module, transform = get_standard_lseg(backbone, max_size=max_size)
+        eval_module, transform = get_standard_lseg(backbone, max_size=max_size, use_upsample=use_upsample)
         eval_module = eval_module.eval()
         eval_module = eval_module.to(device)
         eval_module.load_state_dict(weights["state_dict"])
