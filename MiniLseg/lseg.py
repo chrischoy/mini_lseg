@@ -28,7 +28,9 @@ from .lseg_blocks import (
 
 up_kwargs = {"mode": "bilinear", "align_corners": True}
 
-WEIGHT_URLS = {"clip_vitl16_384": "http://node2.chrischoy.org/data/etc/demo_e200.ckpt"}
+WEIGHT_URLS = {
+    "clip_vitl16_384": "http://node2.chrischoy.org/data/etc/demo_e200.ckpt"
+}
 GLOBAL_LSEGS = dict()
 
 
@@ -69,7 +71,8 @@ class LSegNet(nn.Module):
         self.scratch.refinenet3 = _make_fusion_block(features, use_bn)
         self.scratch.refinenet4 = _make_fusion_block(features, use_bn)
 
-        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07)).exp()
+        self.logit_scale = nn.Parameter(torch.ones([]) *
+                                        np.log(1 / 0.07)).exp()
         if backbone in ["clipRN50x16_vitl16_384"]:
             self.out_c = 768
         else:
@@ -78,10 +81,12 @@ class LSegNet(nn.Module):
 
         self.arch_option = kwargs["arch_option"]
         if self.arch_option == 1:
-            self.scratch.head_block = bottleneck_block(activation=kwargs["activation"])
+            self.scratch.head_block = bottleneck_block(
+                activation=kwargs["activation"])
             self.block_depth = kwargs["block_depth"]
         elif self.arch_option == 2:
-            self.scratch.head_block = depthwise_block(activation=kwargs["activation"])
+            self.scratch.head_block = depthwise_block(
+                activation=kwargs["activation"])
             self.block_depth = kwargs["block_depth"]
 
         self.scratch.output_conv = head
@@ -120,20 +125,17 @@ class LSegNet(nn.Module):
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
         if labelset is None:
-            out = image_features.view(imshape[0], imshape[2], imshape[3], -1).permute(
-                0, 3, 1, 2
-            )
+            out = image_features.view(imshape[0], imshape[2], imshape[3], -1).permute(0, 3, 1, 2)
             out = self.scratch.output_conv(out)
             return out
 
         text_features = self.encode_text(labelset)
-        logits_per_image = self.logit_scale * image_features.half() @ text_features.t()
+        logits_per_image = self.logit_scale * image_features.half(
+        ) @ text_features.t()
 
-        out = (
-            logits_per_image.float()
-            .view(imshape[0], imshape[2], imshape[3], -1)
-            .permute(0, 3, 1, 2)
-        )
+        out = (logits_per_image.float().view(imshape[0], imshape[2],
+                                             imshape[3],
+                                             -1).permute(0, 3, 1, 2))
 
         if self.arch_option in [1, 2]:
             for _ in range(self.block_depth - 1):
@@ -147,7 +149,6 @@ class LSegNet(nn.Module):
 
 class LSegMultiEvalModule(nn.Module):
     """Multi-size Segmentation Eavluator"""
-
     def __init__(
         self,
         net,
@@ -157,7 +158,7 @@ class LSegMultiEvalModule(nn.Module):
     ):
         super(LSegMultiEvalModule, self).__init__()
         self.max_size = max_size
-        self.crop_size = 480
+        self.crop_size = max_size
 
         self.mean = [0.5, 0.5, 0.5]
         self.std = [0.5, 0.5, 0.5]
@@ -166,11 +167,8 @@ class LSegMultiEvalModule(nn.Module):
         self.scales = scales
         self.flip = flip
         self.net = net
-        print(
-            "MultiEvalModule: scale 1 max_size {}, crop_size {}".format(
-                self.max_size, self.crop_size
-            )
-        )
+        print("MultiEvalModule: scale 1 max_size {}, crop_size {}".format(
+            self.max_size, self.crop_size))
 
     def single_forward(self, image, label_set=None):
         batch, _, height, width = image.size()
@@ -209,12 +207,8 @@ class LSegMultiEvalModule(nn.Module):
                     crop_img = crop_image(pad_img, h0, h1, w0, w1)
                     # pad if needed
                     pad_crop_img = pad_image(crop_img, self.mean, self.std, crop_size)
-                    output = module_inference(
-                        self.net, pad_crop_img, label_set, self.flip
-                    )
-                    outputs[:, :, h0:h1, w0:w1] += crop_image(
-                        output, 0, h1 - h0, 0, w1 - w0
-                    )
+                    output = module_inference(self.net, pad_crop_img, label_set, self.flip)
+                    outputs[:, :, h0:h1, w0:w1] += crop_image(output, 0, h1 - h0, 0, w1 - w0)
                     count_norm[:, :, h0:h1, w0:w1] += 1
             assert (count_norm == 0).sum() == 0
             outputs = outputs / count_norm
@@ -286,9 +280,8 @@ def pad_image(img, mean, std, crop_size):
     img_pad = img.new().resize_(b, c, h + padh, w + padw)
     for i in range(c):
         # note that pytorch pad params is in reversed orders
-        img_pad[:, i, :, :] = F.pad(
-            img[:, i, :, :], (0, padw, 0, padh), value=pad_values[i]
-        )
+        img_pad[:, i, :, :] = F.pad(img[:, i, :, :], (0, padw, 0, padh),
+                                    value=pad_values[i])
     assert img_pad.size(2) >= crop_size and img_pad.size(3) >= crop_size
     return img_pad
 
@@ -332,7 +325,7 @@ class ResizeLargeImage(object):
     def __call__(self, x):
         assert x.ndim == 4
         _, c, h, w = x.shape
-        assert c in [3, 4], f"Invalid shape {x.shape}. The format must be BxCxHxW."
+        assert c in [3, 4 ], f"Invalid shape {x.shape}. The format must be BxCxHxW."
         # resize image to current size
         if h > self.max_size or w > self.max_size:
             height, width, _ = resize_hw_max(h, w, self.max_size)
@@ -340,12 +333,14 @@ class ResizeLargeImage(object):
         return x
 
 
-def get_standard_lseg(backbone="clip_vitl16_384", max_size=520, use_upsample=True):
+def get_standard_lseg(backbone="clip_vitl16_384",
+                      max_size=520,
+                      use_upsample=True,
+                      use_multi_scale=True):
     head = nn.Identity()
     if use_upsample:
         head = nn.Sequential(
-            Interpolate(scale_factor=2, mode="bilinear", align_corners=True),
-        )
+            Interpolate(scale_factor=2, mode="bilinear", align_corners=True), )
 
     net = LSegNet(
         head=head,
@@ -370,22 +365,22 @@ def get_standard_lseg(backbone="clip_vitl16_384", max_size=520, use_upsample=Tru
         activation="lrelu",
     )
 
-    transform = transforms.Compose(
-        [
-            ToTensor(),
-            Unsqueeze(),
-            ResizeLargeImage(max_size),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-        ]
-    )
+    transform = transforms.Compose([
+        ToTensor(),
+        Unsqueeze(),
+        ResizeLargeImage(max_size),
+        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+    ])
 
-    return LSegMultiEvalModule(net, max_size=max_size), transform
+    scales = scales=[0.5, 0.75, 1.0, 1.25, 1.5, 1.75] if use_multi_scale else [1.0]
+    return LSegMultiEvalModule(net, max_size=max_size, scales=scales), transform
 
 
 @torch.no_grad()
 def init_lseg(
     backbone="clip_vitl16_384",
     use_upsample=True,
+    use_multi_scale=True,
     weight_path=None,
     max_size=320,
     device="cuda",
@@ -415,7 +410,12 @@ def init_lseg(
 
     def _load_lseg():
         weights = torch.load(weight_path, map_location=device)
-        eval_module, transform = get_standard_lseg(backbone, max_size=max_size, use_upsample=use_upsample)
+        eval_module, transform = get_standard_lseg(
+            backbone,
+            max_size=max_size,
+            use_upsample=use_upsample,
+            use_multi_scale=use_multi_scale,
+        )
         eval_module = eval_module.eval()
         eval_module = eval_module.to(device)
         eval_module.load_state_dict(weights["state_dict"])
